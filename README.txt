@@ -28,7 +28,7 @@ The project is divided in the following library modules:
   library.
 
 - acu_std.{c,h} provides wrappers for some standard library constructors
-  (such as malloc, fopen, pthread_mutex_lock, ...) that create a unique
+  (such as malloc, fopen, pthread_mutex_lock, ...) that create unique
   pointers to the resources making them subject to automatic cleanup.
 
 See simple program "example.c" for examples on use of exceptions and
