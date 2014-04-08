@@ -54,7 +54,11 @@ acu_shared *s = acu_share(u);
 
 This creates new shared pointer 's', whose reference count is one, and whose object pointer and destructor
 are copied from 'u'. Contents of unique pointer 'u' are replaced with a forward reference to the new shared
-pointer 's'. A new acu_unique reference to a shared pointer 's' can be created using
+pointer 's', and destuctor of 'u' is function that decreases reference_count of 's' by one, and calls
+destructor of 's' if it goes to zero. Note that acu_shared object actually is similar to the counter object
+pointed to by a shared_ptr in C++. In my opinion calling this counter object a shared pointer makes more sense. 
+
+A new acu_unique reference to a shared pointer 's' can be created using
 
 acu_unique *u = acu_new_reference(s);
 
@@ -77,7 +81,7 @@ with the shared object. After the call, unique pointer referenced by 'u' becomes
 
 By default, shared pointers are not thread-safe, but they can be made such by defining ACU_THREAD_SAFE
 before including any of the related headers. Thread safety is achieved by mutex protecting submission of new
-unique pointers top a shared pointer, and atomicity of counter operations. The latter is implemented using
+unique pointers to a shared pointer, and atomicity of counter operations. The latter is implemented using
 gcc-supported __sync_sub_and_fetch and __sync_add_and_fetch builtins. Reference to a shared object may only
 be passed to another thread by using acu_transfer(). Client code may not assume that transfer is atomic.
 Signalling that the receiving acu_unique is ready, and that transfer is completed, is left to client code.
