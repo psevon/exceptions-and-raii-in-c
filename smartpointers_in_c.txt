@@ -67,7 +67,7 @@ acu_destruct(u);
 A unique pointer can be submitted to a shared pointer so that destruction of the shared object triggers
 destruction of the unique object. This can be done using function
 
-void acu_submit_to(acu_unique u, acu_shared s);
+void acu_submit_to(acu_unique *u, acu_shared *s);
 
 Any number of unique pointers can be submitted to the same shared pointer. Submitting unique pointers is
 useful for construction of compound objects whose parts have their own constructors and destructors.
@@ -105,7 +105,7 @@ the function scope, if any.
 Another approach to creating acu-constructors is to pass a reference to the acu_unique pointer as an argument
 to the constructor. Malloc wrapped this way would look like this:
 
-void *acu_malloc_u(size_t s, acu_unique r)
+void *acu_malloc_u(size_t s, acu_unique *r)
 {
 	void *p = malloc(s);
 	if (p) r = acu_new_unique(p, free);
@@ -115,7 +115,7 @@ void *acu_malloc_u(size_t s, acu_unique r)
 
 If the constructor needs to allocate some temporary resources, it can utilize autocleaup itself:
 
-void *acu_malloc_init(size_t s, acu_unique r)
+void *acu_malloc_init(size_t s, acu_unique *r)
 BEGIN
 	acu_unique *lock = acu_pthread_mutex_lock(mutex_g);
 	void *p = acu_malloc_t(s);	// acu_malloc_t throws exception if allocation fails

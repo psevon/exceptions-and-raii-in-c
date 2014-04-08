@@ -1,6 +1,15 @@
 This project intends to provide C++ like exception handling and 
-smartpointer functionality to C programs. The project is divided in 
-several library modules:
+smartpointer functionality to C programs. There are several existing 
+setjmp/longjmp based implementations for exceptions, but exceptions are 
+not very useful without automatic cleanup. The goal of this project was 
+to produce an exception handling framework that is closer to the 
+philosophy in C++: avoiding the need for explicit cleanup procedures in 
+"finally" blocks by RAII style programming, where resources are released 
+automatically when they go out of scope. This project provides both 
+unique pointers that always have a single owner, but ownership is 
+transferrable, and shared pointers with reference countyers.
+
+The project is divided in the following library modules:
 
 - exception.{c,h} define basic exception handling functionality and macros
   defining TRY-CATCH-TRY_END macro brackets, and macros throw(e) and rethrow
@@ -26,5 +35,4 @@ See simple program "example.c" for examples on use of exceptions and
 smartpointers.
 
 gcc *.c -o example
-
 
