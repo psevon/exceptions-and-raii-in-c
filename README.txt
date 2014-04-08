@@ -7,7 +7,7 @@ philosophy in C++: avoiding the need for explicit cleanup procedures in
 "finally" blocks by RAII style programming, where resources are released 
 automatically when they go out of scope. This project provides both 
 unique pointers that always have a single owner, but ownership is 
-transferrable, and shared pointers with reference countyers.
+transferrable, and shared pointers with reference counters.
 
 The project is divided in the following library modules:
 
