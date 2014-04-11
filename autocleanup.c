@@ -53,11 +53,12 @@ static void _acu_destruct(acu_unique *u)
 	free(u);
 }
 
-/* Pop and destruct all unique nodes in a stack pointed to by *tailptr, until node 'a' (exclusive), or
- * all nodes if a == NULL. */
-void _acu_cleanup(acu_unique *new_stack_ptr, acu_unique **stack_ptr_ref)
+/* Pop and destruct all unique nodes in a stack pointed to by *stack_ref_ptr, until node 'u' (exclusive), or
+ * all nodes if u == NULL. */
+void _acu_cleanup(acu_unique *u, acu_unique **stack_ptr_ref)
 {
-	while (*stack_ptr_ref != new_stack_ptr)
+	if (u) u = u->prev;
+	while (*stack_ptr_ref != u)
 	{
 		acu_unique *c = *stack_ptr_ref;
 		*stack_ptr_ref = c->prev;

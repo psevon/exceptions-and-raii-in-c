@@ -83,8 +83,8 @@ void _acu_atexit_cleanup(void);
 	#define acu_init_thread phthread_cleanup_push(_acu_thread_cleanup, NULL);
 #endif
 
-#define BEGIN { acu_unique *_acu_stack_ptr_scope = _acu_stack_ptr, *_acu_stack_ptr_fn = _acu_stack_ptr; _acu_latest = NULL;
-#define BEGIN_SCOPE { acu_unique *_acu_stack_ptr_scope = _acu_stack_ptr; jmp_buf _acu_scope_context; if (setjmp(_acu_scope_context) == 0) {
+#define BEGIN { acu_unique *_acu_stack_ptr_scope = acu_reserve(), *_acu_stack_ptr_fn = _acu_stack_ptr_scope; _acu_latest = NULL;
+#define BEGIN_SCOPE { acu_unique *_acu_stack_ptr_scope = acu_reserve(); jmp_buf _acu_scope_context; if (setjmp(_acu_scope_context) == 0) {
 
 #define END_SCOPE } _acu_cleanup(_acu_stack_ptr_scope, &_acu_stack_ptr); }
 #define END _acu_cleanup(_acu_stack_ptr_fn, &_acu_stack_ptr); }
