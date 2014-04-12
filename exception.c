@@ -24,7 +24,7 @@ void _exc_default_handler(void)
 	char buf[256];
 	if (_exception_ptr->to_str) (_exception_ptr->to_str)(buf, sizeof(buf));
 	else snprintf(buf, sizeof(buf), "type %d", _exception_ptr->type);
-	fprintf(stderr, "Uncaught exception: %s\n", buf);
+	fprintf(stderr, "Uncaught exception (%s, line %d): %s\n", _exception_ptr->file, _exception_ptr->line, buf);
 	acu_exit(1);
 }
 

@@ -2,6 +2,7 @@
 #define EXCEPTION_H
 
 #include <setjmp.h>
+#include <string.h>
 #include "autocleanup.h"
 
 struct exception {
@@ -36,7 +37,7 @@ void _exc_clear(void);
 #define throw(e) { struct exception *_e = (e); \
 	if (_e && _e != _exception_ptr) { \
 		_exc_clear(); _exception_ptr = _e; \
-		_e->line = __LINE__; _e->file == __FILE__; \
+		_e->line = __LINE__; _e->file = strdup(__FILE__); \
 	} \
 	if (_exc_context) longjmp(*_exc_context, 1); \
 	_exc_default_handler(); }
