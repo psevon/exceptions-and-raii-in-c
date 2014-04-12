@@ -33,6 +33,7 @@ struct _acu_shared_node {
 	acu_unique *tail;
 	int refcnt;
 	#ifdef ACU_THREAD_SAFE
+		int shared;
 		pthread_mutex_t lock;
 	#endif
 };
@@ -53,7 +54,7 @@ static void _acu_destruct(acu_unique *u)
 	free(u);
 }
 
-/* Pop and destruct all unique nodes in a stack pointed to by *stack_ref_ptr, until node 'u' (exclusive), or
+/* Pop and destruct all unique nodes in a stack pointed to by *stack_ref_ptr, until node 'u' (inclusive), or
  * all nodes if u == NULL. */
 void _acu_cleanup(acu_unique *u, acu_unique **stack_ptr_ref)
 {
@@ -80,7 +81,7 @@ static acu_unique *_acu_new_unique(void *ptr, void (*del)(void *), acu_unique **
 	return u;
 }
 
-/* Create a new unique node with reference to 'ptr' with destructor 'del' to the main stack, return pointer to the ctreated node */
+/* Create a new unique node with reference to 'ptr' with destructor 'del' to the main stack, return pointer to the created node */
 acu_unique *acu_new_unique(void *ptr, void (*del)(void *)) {
 	acu_unique *u = _acu_new_unique(ptr, del, &_acu_stack_ptr);
 	_acu_latest = u;
@@ -134,6 +135,12 @@ void acu_transfer(acu_unique *from, acu_unique *to)
 	acu_destruct(from);
 }
 
+/* Swap the contents of two unique pointers */
+void acu_swap(acu_unique *a, acu_unique *b)
+{
+	acu_unique t = *a; *a = *b; *b = t;
+}
+
 /* Destructor for a unique node pointing to a shared node */
 static void _acu_del_forward_link(void *p)
 {
@@ -178,6 +185,7 @@ acu_unique *acu_new_reference(acu_shared *s)
 	#ifndef ACU_THREAD_SAFE
 		s->refcnt++;
 	#else 
+		s->shared = 1;
 		(void)__sync_add_and_fetch(&(s->refcnt), 1);
 	#endif
 	return u;
@@ -191,11 +199,16 @@ void acu_submit_to(acu_unique *u, acu_shared *s)
 {
 	/* Make a copy of a to ensure that caller will not have a handle to the object after attaching */
 	#ifdef ACU_THREAD_SAFE
-		acu_unique *lockptr = acu_pthread_mutex_lock(&(s->lock));
+		/* Take mutex lock only if acu_new_reference(s) has been called at least once, otherwise
+		 * there cannot be a race condition. Because of this, if at all possible, the creator of
+		 * the shared object should do all acu_submit_to calls before creating additonal references
+                 * to the object. */
+		acu_unique *lockptr;
+		if (s->shared) lockptr = acu_pthread_mutex_lock(&(s->lock));
 	#endif
 	acu_unique *b = _acu_new_unique(u->base.ptr, u->base.del, &(s->tail));
 	#ifdef ACU_THREAD_SAFE
-		acu_destruct(lockptr);
+		if (s->shared) acu_destruct(lockptr);
 	#endif
 
 	/* Unlink the previous object, do not call the destructor, since we are effectively just moving

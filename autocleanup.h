@@ -63,23 +63,53 @@ typedef struct _acu_shared_node acu_shared;
 
 extern __thread acu_unique *_acu_stack_ptr, *_acu_latest;
 
-void _acu_cleanup(acu_unique *a, acu_unique **tailptr);
-acu_unique *acu_new_unique(void *ptr, void (*del)(void *));
-acu_unique *acu_latest(void);
-void acu_destruct(acu_unique *a);
-void acu_update(acu_unique *a, void *p);
-void acu_submit_to(acu_unique *a, acu_shared *s);
-acu_unique *acu_reserve(void);
-acu_shared *acu_share(acu_unique *a);
-acu_unique *acu_new_reference(acu_shared *s);
-void acu_transfer(acu_unique *from, acu_unique *to);
-void *acu_dereference(acu_unique *a);
-void *acu_dereference_shared(acu_shared *s);
-
+/* Private cleanup functions, required in the header because the macros use them */
+void _acu_cleanup(acu_unique *u, acu_unique **tailptr);
 void _acu_atexit_cleanup(void);
-#define acu_init atexit(_acu_atexit_cleanup);
 #ifdef ACU_THREAD_SAFE
 	void _acu_thread_cleanup(void *);
+#endif
+
+/* Create a new unique pointer to object 'ptr' with destructor 'del', return pointer to it */
+acu_unique *acu_new_unique(void *ptr, void (*del)(void *));
+
+/* Get pointer to the latest unique node. Will throw an exception if
+ * 1) no unique nodes have been created within the same function, or
+ * 2) no unique nodes have been created after last call to acu_latest(), acu_share(), acu_destruct() or acu_submit_to(). */
+acu_unique *acu_latest(void);
+
+/* Explicit destruction of unique pointer *u. usually not needed, but may be useful for releasing critical resources
+ * suc as locks as early as possible. */
+void acu_destruct(acu_unique *u);
+
+/* Update the pointer to an object, he only motivation for having this is realloc */
+void acu_update(acu_unique *u, void *p);
+
+/* Detach unique pointer 'u' from the cleanup stack and push a copy of it to cleanup stack of shared pointer 's'. */
+void acu_submit_to(acu_unique *u, acu_shared *s);
+
+/* Create an empty unique node (for receiving ownership by acu_transfer) and return pointer to it */
+acu_unique *acu_reserve(void);
+
+/* Create a shared pointer pointing to the same object unique pointer 'u' points to. Turn 'u' into a forward reference to the
+ * shared node. Set reference count of the shared node to 1. Return pointer to the acu_shared object. */
+acu_shared *acu_share(acu_unique *u);
+
+/* Create new acu_unique object pointing to shared node 's'. Increase reference count of 's' by one. */
+acu_unique *acu_new_reference(acu_shared *s);
+
+/* Copy unique object reference from 'from' to 'to', and unlink unique pointer 'from'. This can be used to transfer ownership of unique node to an outer scope. */
+void acu_transfer(acu_unique *from, acu_unique *to);
+
+/* Swap the contents of two unique pointers */
+void acu_swap(acu_unique *a, acu_unique *b);
+
+/* Dereference unique pointer, follow chain of forward links first */
+void *acu_dereference(acu_unique *u);
+
+
+#define acu_init atexit(_acu_atexit_cleanup);
+#ifdef ACU_THREAD_SAFE
 	#define acu_init_thread phthread_cleanup_push(_acu_thread_cleanup, NULL);
 #endif
 
