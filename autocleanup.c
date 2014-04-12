@@ -11,7 +11,8 @@
 
 
 /* Forward declarations */
-static void _acu_del_forward_link(void *p);
+static void _acu_del_strong_ref(void *p);
+static void _acu_del_weak_ref(void *p);
 
 /* Opaque classes */
 
@@ -31,7 +32,7 @@ struct _acu_stack_node {
 struct _acu_shared_node {
 	struct _acu_node base;
 	acu_unique *tail;
-	int refcnt;
+	int refcnt, weakcnt;
 	#ifdef ACU_THREAD_SAFE
 		int shared;
 		pthread_mutex_t lock;
@@ -115,7 +116,7 @@ void acu_destruct(acu_unique *u)
 void acu_update(acu_unique *u, void *newptr)
 {
 	struct _acu_node *p = (struct _acu_node *)u;
-	while (p->del == _acu_del_forward_link) p = p->ptr;
+	while (p->del == _acu_del_strong_ref) p = p->ptr;
 	p->ptr = newptr;
 }
 
@@ -123,7 +124,7 @@ void acu_update(acu_unique *u, void *newptr)
 void *acu_dereference(acu_unique *u)
 {
 	struct _acu_node *p = (struct _acu_node *)u;
-	while (p->del == _acu_del_forward_link) p = p->ptr;
+	while (p->del == _acu_del_strong_ref) p = p->ptr;
 	return p->ptr;
 }
 
@@ -141,8 +142,27 @@ void acu_swap(acu_unique *a, acu_unique *b)
 	acu_unique t = *a; *a = *b; *b = t;
 }
 
-/* Destructor for a unique node pointing to a shared node */
-static void _acu_del_forward_link(void *p)
+/* Destructor for a unique pointer with a weak reference to a shard pointer */
+static void _acu_del_weak_ref(void *p)
+{
+	acu_shared *s = (acu_shared *)p;
+	if (
+	#ifndef ACU_THREAD_SAFE
+		--s->weakcnt == 0
+	#else
+		__sync_sub_and_fetch(&(s->weakcnt), 1) == 0
+	#endif
+	)
+	{
+		#ifdef ACU_THREAD_SAFE
+			(void)pthread_mutex_destroy(&(s->lock));
+		#endif
+		free(s);
+	}
+}
+
+/* Destructor for a unique node with a strong reference to a shared node */
+static void _acu_del_strong_ref(void *p)
 {
 	acu_shared *s = (acu_shared *)p;
 	if (
@@ -155,10 +175,7 @@ static void _acu_del_forward_link(void *p)
 	{
 		_acu_cleanup(NULL, &(s->tail));
 		if (s->base.del) (s->base.del)(s->base.ptr);
-		#ifdef ACU_THREAD_SAFE
-			(void)pthread_mutex_destroy(&(s->lock));
-		#endif
-		free(s);
+		_acu_del_weak_ref(p);
 	}	
 }
 
@@ -169,9 +186,9 @@ acu_shared *acu_share(acu_unique *u)
 {
 	acu_shared *s = calloc_t(1, sizeof(acu_shared));
 	s->base = u->base;
-	s->refcnt = 1;
+	s->refcnt = s->weakcnt = 1;
 	u->base.ptr = s;
-	u->base.del = _acu_del_forward_link;
+	u->base.del = _acu_del_strong_ref;
 	#ifdef ACU_THREAD_SAFE
 		if (pthread_mutex_init(&(s->lock), NULL)) throw(new_io_exception(errno, "", "acu_share"));
 	#endif
@@ -181,15 +198,55 @@ acu_shared *acu_share(acu_unique *u)
 /* Create new unique node to main stack, pointing to shared node 's'. Increase reference count of 's' by one. */
 acu_unique *acu_new_reference(acu_shared *s)
 {
-	acu_unique *u = acu_new_unique(s, _acu_del_forward_link);
+	acu_unique *u = acu_new_unique(s, _acu_del_strong_ref);
 	#ifndef ACU_THREAD_SAFE
+		if (s->refcnt == 0) s->weakcnt++;
 		s->refcnt++;
 	#else 
 		s->shared = 1;
-		(void)__sync_add_and_fetch(&(s->refcnt), 1);
+		if (__sync_fetch_and_add(&(s->refcnt), 1) == 0) (void)__sync_fetch_and_add(&(s->weakcnt), 1);
 	#endif
 	return u;
 }
+
+
+/* Create new unique node with a weak reference to shared pointer 's'. */
+acu_unique *acu_new_weak_reference(acu_shared *s)
+{
+	acu_unique *u = acu_new_unique(s, _acu_del_weak_ref);
+	#ifndef ACU_THREAD_SAFE
+		s->weakcnt++;
+	#else 
+		s->shared = 1;
+		(void)__sync_fetch_and_add(&(s->weakcnt), 1);
+	#endif
+	return u;
+}
+
+/* Obtain a strong reference from a weak reference. This must be done for a resource to which the caller
+ * only owns a weak reference before actually using the resource to guarantee that it actually exists,
+ * and it won't be destructed while being used. Returns NULL if the resource is already destructed. */
+acu_unique *acu_get_strong_reference(acu_unique *weakptr)
+{
+	if (!weakptr || weakptr->base.del != _acu_del_weak_ref) throw(new_name_exception("acu_get_strong_reference: argument not a weakptr"));
+	acu_shared *s = weakptr->base.ptr;
+	if (
+	#ifndef ACU_THREAD_SAFE
+		s->refcnt++ == 0
+	#else
+		__sync_fetch_and_add(&(s->refcnt), 1) == 0
+	#endif
+	)
+	{
+		s->refcnt = 0;
+		return NULL;
+	}
+
+	acu_unique *u = acu_new_unique(s, _acu_del_strong_ref);
+	return u;
+}
+
+
 
 /* Detach unique node 'u' from the main stack and push a copy of it to stack of shared object 's'.
  * Note that the library is designed so that user agent may not get handles to unique objects

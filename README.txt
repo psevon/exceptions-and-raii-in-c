@@ -1,13 +1,32 @@
-This project intends to provide C++ like exception handling and 
-smartpointer functionality to C programs. There are several existing 
-setjmp/longjmp based implementations for exceptions, but exceptions are 
-not very useful without automatic cleanup. The goal of this project was 
-to produce an exception handling framework that is closer to the 
-philosophy in C++: avoiding the need for explicit cleanup procedures in 
-"finally" blocks by RAII style programming, where resources are released 
-automatically when they go out of scope. This project provides both 
-unique pointers that always have a single owner, but ownership is 
-transferrable, and shared pointers with reference counters.
+In the C software projects I'm involved in I grew tired of the excessive
+boiler plate code for error checking and releasing resources in exceptional
+cases, and despite all the effort there's always a leak here and there.  
+
+I wanted to have an exception handling mechanism like most modern programming
+languages have, allowing for centralized error handling. The critical issue
+with exception handling, often overlooked, is releasing the acquired
+resources. There are two differing philosophies:
+- RAII (e.g., C++), in which destructors are automatically called for any
+  objects going out of their scope. This work also in cases where functions
+  let exceptions pass through uncatched.
+- finally blocks (e.g., java), which contain code that releases the resources.
+
+I strongly prefer the first option, since in my opinion finally blocks make
+exception handling mechanisms to be no more than syntactic sugar if non-leaky
+code is pursued; it practically means that exceptions must be catched in every
+function that does acquire some resources. There is garbage collection of
+course, but there's no guarantee when it's invoked and for some resources such
+as mutex locks that's not good enough.
+
+There are numerous exception handling libraries available for C, most based on
+setjmp/longjmp, some providing finally blocks, and some even have support for
+local-scope RAII. But for true RAII we need more, we need smartpointers.
+
+This project intends to provide C++ like exception handling and smartpointer
+functionality to C programs; RAII style programming, and no explicit cleanup
+procedures in "finally" blocks. This project provides both unique pointers
+that always have a single owner, but ownership is transferrable, and shared,
+reference counted object with strong and weak references.
 
 The project is divided in the following library modules:
 

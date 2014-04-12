@@ -5,94 +5,132 @@ Author:  Petteri Sevon
 Date:    2014-04-06
 License: LICENSE.txt (FreeBSD)
 
-This C library provides RAII functionality similar to unique_ptr and shared_ptr smartpointers in C++.
-It provides two opaque classes, acu_unique and acu_shared, for automatic cleanup when the object
-goes out of scope, or its reference counter goes to zero. Such automatic cleanup can significantly
-reduce boiler plate code, especially in functions allocating many resources and having many exit points.
-The library works seamlessly with exception.c, a library defining exception classes and macros for
-throwing and catching exceptions. Automatic cleanup is particularly useful in presence of exceptions,
-since it eliminates the need for having "finally" blocks (for which there's no support in exception.c),
-and allows intermediate functions to let exceptions pass through without catching and still have
-their locally allocated resources cleaned up properly.
+This C library provides RAII functionality similar to unique_ptr and 
+shared_ptr smartpointers in C++. It provides two opaque classes, 
+acu_unique and acu_shared, for automatic cleanup when the object goes 
+out of scope, or its reference counter goes to zero. Such automatic 
+cleanup can significantly reduce boiler plate code, especially in 
+functions allocating many resources and having many exit points. The 
+library works seamlessly with exception.c, a library defining exception 
+classes and macros for throwing and catching exceptions. Automatic 
+cleanup is particularly useful in presence of exceptions, since it 
+eliminates the need for having "finally" blocks (for which there's no 
+support in exception.c), and allows intermediate functions to let 
+exceptions pass through without catching and still have their locally 
+allocated resources cleaned up properly.
 
-Since C does not provide any mechanism to hook any additional functionality to braces limiting a scope,
-the library defines macro brackets BEGIN and END for enclosing function definitions, and BEGIN_SCOPE
-and END_SCOPE for enclosing inner scopes (freely nestable). Also, exiting scope using return, goto,
-continue, break or longjmp should be avoided (although the objects will be destructed later even if
-cleanup is escaped due to improper scope exit). Use macros acu_return(v), acu_return_void(), or
-acu_exit_scope(), or function acu_exit(v) to properly exit a scope or function.
+Since C does not provide any mechanism to hook any additional 
+functionality to braces limiting a scope, the library defines macro 
+brackets BEGIN and END for enclosing function definitions, and 
+BEGIN_SCOPE and END_SCOPE for enclosing inner scopes (freely nestable). 
+Also, exiting scope using return, goto, continue, break or longjmp 
+should be avoided (although the objects will be destructed later even if 
+cleanup is escaped due to improper scope exit). Use macros 
+acu_return(v), acu_return_void(), or acu_exit_scope(), or function 
+acu_exit(v) to properly exit a scope or function.
 
-The unique and shared pointers defined in this library have a slightly different role compared to their
-C++ counterparts, as they are primarily only intended to control the lifespan of the objects they point
-to, and not for accessing the objects, although functionality is provided for object access
-(acu_dereference(u)), but due to limitations of C the returned pointer must be excplicitly casted to
-correct type.
+The unique and shared pointers defined in this library have a slightly 
+different role compared to their C++ counterparts, as they are primarily 
+only intended to control the lifespan of the objects they point to, and 
+not for accessing the objects, although functionality is provided for 
+object access (acu_dereference(u)), but due to limitations of C the 
+returned pointer must be excplicitly casted to correct type.
 
-Another major difference is that the C implementations have an extra layer of indirection. For example
+Another major difference is that the C implementations have an extra 
+layer of indirection. For example
 
 acu_unique *u = acu_new_unique(o, del);
 
-creates a unique smartpointer pointing to object 'o' which has destructor function 'del'. Smartpointers
-are always accessed through pointers to them, never directly. The smartpointer is bound to the scope in
-which it's created, not the scope of 'u'. The value of 'u' can be freely assigned to any variable in any
-scope, but that has no effect on the scope or lifespan of the actual smartpointer.
+creates a unique smartpointer pointing to object 'o' which has 
+destructor function 'del'. Smartpointers are always accessed through 
+pointers to them, never directly. The smartpointer is bound to the scope 
+in which it's created, not the scope of 'u'. The value of 'u' can be 
+freely assigned to any variable in any scope, but that has no effect on 
+the scope or lifespan of the actual smartpointer.
 
-The transfer of ownership implied by assigning unique_ptr to another in C++ is done using function
+The transfer of ownership implied by assigning unique_ptr to another in 
+C++ is done using function
 
 acu_transfer(a, b);
 
-which passes the ownership of the acu_unique object 'a' to another acu_unique object 'b', typically passed
-as an argument to the function which constructed 'a'. Target of 'a' will be undefined after this call. Empty
-acu_unique objects required for receiving the ownership can be created using
+which passes the ownership of the acu_unique object 'a' to another 
+acu_unique object 'b', typically passed as an argument to the function 
+which constructed 'a'. Target of 'a' will be undefined after this call. 
+Empty acu_unique objects required for receiving the ownership can be 
+created using
 
 acu_unique *r = acu_reserve();
 
+Another function for changing ownership is acu_swap(a, b), which 
+exchanges the contens of the acu_unique objects.
 
 acu_unique object 'u' can be shared by calling
 
 acu_shared *s = acu_share(u);
 
-This creates new shared pointer 's', whose reference count is one, and whose object pointer and destructor
-are copied from 'u'. Contents of unique pointer 'u' are replaced with a forward reference to the new shared
-pointer 's', and destuctor of 'u' is function that decreases reference_count of 's' by one, and calls
-destructor of 's' if it goes to zero. Note that acu_shared object actually is similar to the counter object
-pointed to by a shared_ptr in C++. In my opinion calling this counter object a shared pointer makes more sense. 
+This creates new shared pointer 's', whose reference count is one, and 
+whose object pointer and destructor are copied from 'u'. Contents of 
+unique pointer 'u' are replaced with a strong reference to the new 
+shared pointer 's', and destuctor of 'u' is function that decreases 
+reference_count of 's' by one, and calls destructor of 's' if it goes to 
+zero. Note that acu_shared object actually is similar to the counter 
+object pointed to by a shared_ptr in C++. In my opinion calling this 
+counter object a shared pointer makes more sense.
 
-A new acu_unique reference to a shared pointer 's' can be created using
+A new acu_unique reference to a shared pointer 's' can be created by 
+calling acu_new_reference(s) or acu_new_weak_reference(s). Before 
+accessing an object weakly referenced by 'acu_unique u', a strong 
+reference must be acquired first by calling acu_get_strong_reference(u), 
+which returns pointer to the new acu_unique object, or NULL if the 
+object was already destructed.
 
-acu_unique *u = acu_new_reference(s);
+Reference counters to a shared pointer are decreased only when a 
+referring unique or shared pointer is destructed. When the strong 
+reference counter goes to zero, destructor of the shared object is 
+called. When the weak counter goes to zero, the shared pointer is 
+destructed, too.
 
-Reference counter to a shared pointer is decreased only when a referring unique or shared pointer is
-destructed. When the counter goes to zero, destructor of the shared object is called. Only unique pointers
-can be destucted from the client code, by calling
+Only unique pointers can be explicitly destucted from the client code, 
+by calling acu_destruct(u). This is only necessary for releasing 
+time-critical resources such as mutex locks, if the end of scope is too 
+far away.
 
-acu_destruct(u);
-
-A unique pointer can be submitted to a shared pointer so that destruction of the shared object triggers
-destruction of the unique object. This can be done using function
+A unique pointer can be submitted to a shared pointer so that 
+destruction of the shared object triggers destruction of the unique 
+object. This can be done using function
 
 void acu_submit_to(acu_unique *u, acu_shared *s);
 
-Any number of unique pointers can be submitted to the same shared pointer. Submitting unique pointers is
-useful for construction of compound objects whose parts have their own constructors and destructors.
-Unique pointers submitted to a shared pointer have no other references to them besides being linked to the
-shared pointers. Their only purpose is to ensure that the objects they point to become destructed together
-with the shared object. After the call, unique pointer referenced by 'u' becomes undefined.
+Any number of unique pointers can be submitted to the same shared 
+pointer. Submitting unique pointers is useful for construction of 
+compound objects whose parts have their own constructors and 
+destructors. Unique pointers submitted to a shared pointer have no other 
+references to them besides being linked to the shared pointers. Their 
+only purpose is to ensure that the objects they point to become 
+destructed together with the shared object. After the call, unique 
+pointer referenced by 'u' becomes undefined.
 
-By default, shared pointers are not thread-safe, but they can be made such by defining ACU_THREAD_SAFE
-before including any of the related headers. Thread safety is achieved by mutex protecting submission of new
-unique pointers to a shared pointer, and atomicity of counter operations. The latter is implemented using
-gcc-supported __sync_sub_and_fetch and __sync_add_and_fetch builtins. Reference to a shared object may only
-be passed to another thread by using acu_transfer(). Client code may not assume that transfer is atomic.
-Signalling that the receiving acu_unique is ready, and that transfer is completed, is left to client code.
+By default, shared pointers are not thread-safe, but they can be made 
+such by defining ACU_THREAD_SAFE before including any of the related 
+headers. Thread safety is achieved by mutex protecting submission of new 
+unique pointers to a shared pointer, and atomicity of counter 
+operations. The latter is implemented using gcc-supported 
+__sync_sub_and_fetch and __sync_add_and_fetch builtins. Reference to a 
+shared object may only be passed to another thread by using 
+acu_transfer() or acu_swap(). Client code may not assume that transfer 
+is atomic. Signalling that the receiving acu_unique is ready, and that 
+transfer is completed, is left to client code.
 
 
 Remarks regarding scopes:
 -------------------------
-A scope for autocleanup functions is a block of code enclosed in BEGIN..END or BEGIN_SCOPE..END_SCOPE macro
-brackets. Normal braces {..} do not limit scopes. Because of this, a function whose definition
-is enclosed in braces belongs to the calling function's scope. This feature is utilized in the acu-wrappers
-for standard C library constructors in acu_std.c. For example malloc is wrapped inside acu_malloc:
+
+A scope for autocleanup functions is a block of code enclosed in 
+BEGIN..END or BEGIN_SCOPE..END_SCOPE macro brackets. Normal braces {..} 
+do not limit scopes. Because of this, a function whose definition is 
+enclosed in braces belongs to the calling function's scope. This feature 
+is utilized in the acu-wrappers for standard C library constructors in 
+acu_std.c. For example malloc is wrapped inside acu_malloc:
 
 void *acu_malloc(size_t s)
 {
@@ -101,13 +139,16 @@ void *acu_malloc(size_t s)
 	return p;
 }
 
-If BEGIN..END and acu_return were used in the above function, the allocated memory would be destructed already
-upon return. Since acu_malloc does not return the acu_unique pointer it creates, the only way for client code
-to obtain it is to call acu_latest(), which returns pointer to the latest allocated acu_unique pointer within
-the function scope, if any.
+If BEGIN..END and acu_return were used in the above function, the 
+allocated memory would be destructed already upon return. Since 
+acu_malloc does not return the acu_unique pointer it creates, the only 
+way for client code to obtain it is to call acu_latest(), which returns 
+pointer to the latest allocated acu_unique pointer within the function 
+scope, if any.
 
-Another approach to creating acu-constructors is to pass a reference to the acu_unique pointer as an argument
-to the constructor. Malloc wrapped this way would look like this:
+Another approach to creating acu-constructors is to pass a reference to 
+the acu_unique pointer as an argument to the constructor. Malloc wrapped 
+this way would look like this:
 
 void *acu_malloc_u(size_t s, acu_unique *r)
 {
@@ -117,23 +158,28 @@ void *acu_malloc_u(size_t s, acu_unique *r)
 }
 
 
-If the constructor needs to allocate some temporary resources, it can utilize autocleaup itself:
+If the constructor needs to allocate some temporary resources, it can 
+utilize autocleaup itself:
 
 void *acu_malloc_init(size_t s, acu_unique *r)
 BEGIN
 	acu_unique *lock = acu_pthread_mutex_lock(mutex_g);
-	void *p = acu_malloc_t(s);	// acu_malloc_t throws exception if allocation fails
 
-	do_some_initialization(p);	// This may throw exception if fails, in which case the
-					// acquired memory and lock will be automatically freed
+	// acu_malloc_t throws exception if allocation fails
+	void *p = acu_malloc_t(s);
 
-	acu_destruct(lock);		// Explicit destruction to keep mutexing period to the
-					// minimum, although hardly makes a real difference here.
+	// This may throw exception if fails, in which case the
+	// acquired memory and lock will be automatically freed
+	do_some_initialization(p);
+
+	// Explicit destruction to keep mutexing period to the
+	// minimum, although hardly makes a real difference here.
+	acu_destruct(lock);
 
 	if (p) acu_transfer(acu_new_unique(p, free), r);
 	acu_return(p);
 END
 
-This approach requires that the client creates an empty acu_unique pointer to pass as argument using
-acu_reserve().
+This approach requires that the client creates an empty acu_unique 
+pointer to pass as argument using acu_reserve().
 
