@@ -7,16 +7,17 @@ languages have, allowing for centralized error handling. The critical issue
 with exception handling, often overlooked, is releasing the acquired
 resources. There are two differing philosophies:
 - RAII (e.g., C++), in which destructors are automatically called for any
-  objects going out of their scope. This work also in cases where functions
+  objects going out of their scope. This works also in cases where functions
   let exceptions pass through uncatched.
 - finally blocks (e.g., java), which contain code that releases the resources.
 
 I strongly prefer the first option, since in my opinion finally blocks make
-exception handling mechanisms to be no more than syntactic sugar if non-leaky
-code is pursued; it practically means that exceptions must be catched in every
-function that does acquire some resources. There is garbage collection of
-course, but there's no guarantee when it's invoked and for some resources such
-as mutex locks that's not good enough.
+exceptions to be little more than structured return values if non-leaky
+code is pursued; it practically means that exceptions must be caught in every
+function that does acquire some resources, which is in stark contrast with the
+goal of centralized error handling. There is garbage collection of course,
+but there's no guarantee when it's invoked and for some resources such as
+mutex locks that's just not good enough.
 
 There are numerous exception handling libraries available for C, most based on
 setjmp/longjmp, some providing finally blocks, and some even have support for

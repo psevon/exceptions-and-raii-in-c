@@ -6,7 +6,7 @@ Date:    2014-04-06
 License: LICENSE.txt (FreeBSD)
 
 This C library provides RAII functionality similar to unique_ptr and 
-shared_ptr smartpointers in C++. It provides two opaque classes, 
+shared_ptr smart pointers in C++. It provides two opaque classes, 
 acu_unique and acu_shared, for automatic cleanup when the object goes 
 out of scope, or its reference counter goes to zero. Such automatic 
 cleanup can significantly reduce boiler plate code, especially in 
@@ -16,7 +16,7 @@ classes and macros for throwing and catching exceptions. Automatic
 cleanup is particularly useful in presence of exceptions, since it 
 eliminates the need for having "finally" blocks (for which there's no 
 support in exception.c), and allows intermediate functions to let 
-exceptions pass through without catching and still have their locally 
+exceptions pass through uncaught and still have their locally 
 allocated resources cleaned up properly.
 
 Since C does not provide any mechanism to hook any additional 
@@ -37,25 +37,24 @@ object access (acu_dereference(u)), but due to limitations of C the
 returned pointer must be excplicitly casted to correct type.
 
 Another major difference is that the C implementations have an extra 
-layer of indirection. For example
+layer of indirection. For example, constructor
 
 acu_unique *u = acu_new_unique(o, del);
 
-creates a unique smartpointer pointing to object 'o' which has 
-destructor function 'del'. Smartpointers are always accessed through 
-pointers to them, never directly. The smartpointer is bound to the scope 
+returns pointer to the created unique pointer managing object 'o' which
+has destructor function 'del'. Smart pointers are always accessed through
+pointers to them, never directly. The smart pointer is bound to the scope 
 in which it's created, not the scope of 'u'. The value of 'u' can be 
 freely assigned to any variable in any scope, but that has no effect on 
 the scope or lifespan of the actual smartpointer.
 
-The transfer of ownership implied by assigning unique_ptr to another in 
-C++ is done using function
+The transfer of ownership (move in C++) is done using function
 
 acu_transfer(a, b);
 
-which passes the ownership of the acu_unique object 'a' to another 
+which passes the ownership of the object managed by 'a' to another 
 acu_unique object 'b', typically passed as an argument to the function 
-which constructed 'a'. Target of 'a' will be undefined after this call. 
+which constructed 'a'. Unique pointer 'a' will be undefined after this call. 
 Empty acu_unique objects required for receiving the ownership can be 
 created using
 
@@ -72,25 +71,24 @@ This creates new shared pointer 's', whose reference count is one, and
 whose object pointer and destructor are copied from 'u'. Contents of 
 unique pointer 'u' are replaced with a strong reference to the new 
 shared pointer 's', and destuctor of 'u' is function that decreases 
-reference_count of 's' by one, and calls destructor of 's' if it goes to 
-zero. Note that acu_shared object actually is similar to the counter 
-object pointed to by a shared_ptr in C++. In my opinion calling this 
-counter object a shared pointer makes more sense.
+reference_count of 's' by one, and calls destructor of the managed
+object if it goes to zero. Note that acu_shared object actually is
+similar to the counter object pointed to by a shared_ptr in C++.
 
 A new acu_unique reference to a shared pointer 's' can be created by 
 calling acu_new_reference(s) or acu_new_weak_reference(s). Before 
 accessing an object weakly referenced by 'acu_unique u', a strong 
-reference must be acquired first by calling acu_get_strong_reference(u), 
+reference must be acquired first by calling acu_lock_reference(u), 
 which returns pointer to the new acu_unique object, or NULL if the 
-object was already destructed.
+object has expired.
 
 Reference counters to a shared pointer are decreased only when a 
 referring unique or shared pointer is destructed. When the strong 
-reference counter goes to zero, destructor of the shared object is 
+reference counter goes to zero, destructor of the managed object is 
 called. When the weak counter goes to zero, the shared pointer is 
 destructed, too.
 
-Only unique pointers can be explicitly destucted from the client code, 
+Only unique pointers can be explicitly destructed from the client code, 
 by calling acu_destruct(u). This is only necessary for releasing 
 time-critical resources such as mutex locks, if the end of scope is too 
 far away.

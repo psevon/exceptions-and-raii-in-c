@@ -223,10 +223,10 @@ acu_unique *acu_new_weak_reference(acu_shared *s)
 	return u;
 }
 
-/* Obtain a strong reference from a weak reference. This must be done for a resource to which the caller
+/* Create a strong reference copy of a weak reference. This must be done for a resource to which the caller
  * only owns a weak reference before actually using the resource to guarantee that it actually exists,
- * and it won't be destructed while being used. Returns NULL if the resource is already destructed. */
-acu_unique *acu_get_strong_reference(acu_unique *weakptr)
+ * and it won't be destructed while being used. Returns NULL if the resource is expired. */
+acu_unique *acu_lock_reference(acu_unique *weakptr)
 {
 	if (!weakptr || weakptr->base.del != _acu_del_weak_ref) throw(new_name_exception("acu_get_strong_reference: argument not a weakptr"));
 	acu_shared *s = weakptr->base.ptr;

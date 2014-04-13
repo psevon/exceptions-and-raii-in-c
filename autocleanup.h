@@ -119,7 +119,7 @@ void *acu_dereference(acu_unique *u);
 acu_unique *acu_new_weak_reference(acu_shared *s);
 
 /* Obtain a strong reference to a shared pointer from a weak reference. If the object is already destructed, return NULL. */
-acu_unique *acu_get_strong_reference(acu_unique *weakptr);
+acu_unique *acu_lock_reference(acu_unique *weakptr);
 
 
 #define acu_init atexit(_acu_atexit_cleanup);
