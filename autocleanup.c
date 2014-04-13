@@ -256,8 +256,8 @@ void acu_submit_to(acu_unique *u, acu_shared *s)
 {
 	/* Make a copy of a to ensure that caller will not have a handle to the object after attaching */
 	#ifdef ACU_THREAD_SAFE
-		/* Take mutex lock only if acu_new_reference(s) has been called at least once, otherwise
-		 * there cannot be a race condition. Because of this, if at all possible, the creator of
+		/* Take mutex lock only if acu_new_[weak_]reference(s) has been called at least once, otherwise
+		 * there cannot be a race condition. Because of this, to achieve maximal performance the creator of
 		 * the shared object should do all acu_submit_to calls before creating additonal references
                  * to the object. */
 		acu_unique *lockptr;

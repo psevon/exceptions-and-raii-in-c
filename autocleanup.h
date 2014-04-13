@@ -54,8 +54,8 @@
 * the scope using goto, continue, break or return will not trigger the destructors.
 * However, the destruct operations will remain in the stack and will be done when the
 * cleaning up is triggered next time. Inner scope can be exited using macro acu_exit_scope(),
-* which will trigger cleaning up. Macro acu_return(v) or acu_return_void can be used to
-* return with cleanup of the entire function scope from anywhere within the function.
+* which will trigger cleaning up. Macro acu_return can be used to return with cleanup of
+* the entire function scope from anywhere within the function.
 *
 * Resources allocated using the acu_ wrappers may not be freed using the normal
 * function calls such as free. If they need to be explicitly released before
@@ -135,8 +135,10 @@ acu_unique *acu_get_strong_reference(acu_unique *weakptr);
 
 #define acu_exit_scope longjmp(_acu_scope_context, 1)
 #define acu_exit(v) { _acu_cleanup(NULL, &_acu_stack_ptr); exit(v); }
-#define acu_return(v) { _acu_cleanup(_acu_stack_ptr_fn, &_acu_stack_ptr); return (v); }
-#define acu_return_void { _acu_cleanup(_acu_stack_ptr_fn, &_acu_stack_ptr); return; }
+
+/* This is designed to be usable in any context plain return can be used. Uses "while" instead of "if",
+ * because "if" would break things if there's an "else" right after acu_return. */
+#define acu_return while (_acu_cleanup(_acu_stack_ptr_fn, &_acu_stack_ptr), 1) return
 
 #endif
 

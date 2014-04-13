@@ -65,7 +65,7 @@ BEGIN
 	if (x == 3) throw(new_fail_exception("fake-fail-exception", -1));
 
 	printf("...exit f\n");
-	acu_return(s2);
+	acu_return s2;
 END
 
 char *g(int x, acu_unique *r)
@@ -78,7 +78,7 @@ char *g(int x, acu_unique *r)
 	char *p = f(x, r);
 	printf("..exit g\n");
 
-	/* Even if BEGIN..END brackets were used, exit by return instead of acu_return()
+	/* Even if BEGIN..END brackets were used, exit by return instead of acu_return
 	 * macro would escape the automatic end-of-scope cleanup, but only until the next
 	 * proper exit from a scope, or ultimately end of program. */
 	return p;
@@ -101,7 +101,7 @@ BEGIN
 		else rethrow;
 	TRY_END
 	printf(".exit h\n");
-	acu_return(s);
+	acu_return s;
 END
 
 int main(int argc, char *argv[])
@@ -121,6 +121,6 @@ BEGIN
 		 * will also be destructed */
 	END_SCOPE
 	printf("exit main\n");
-	acu_return(0);
+	acu_return 0;
 END
 

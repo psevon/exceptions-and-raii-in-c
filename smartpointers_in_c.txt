@@ -25,9 +25,9 @@ brackets BEGIN and END for enclosing function definitions, and
 BEGIN_SCOPE and END_SCOPE for enclosing inner scopes (freely nestable). 
 Also, exiting scope using return, goto, continue, break or longjmp 
 should be avoided (although the objects will be destructed later even if 
-cleanup is escaped due to improper scope exit). Use macros 
-acu_return(v), acu_return_void(), or acu_exit_scope(), or function 
-acu_exit(v) to properly exit a scope or function.
+cleanup is escaped due to improper scope exit). Use macros acu_return
+or acu_exit_scope, or function acu_exit(v) to properly exit a scope or
+function.
 
 The unique and shared pointers defined in this library have a slightly 
 different role compared to their C++ counterparts, as they are primarily 
@@ -177,7 +177,7 @@ BEGIN
 	acu_destruct(lock);
 
 	if (p) acu_transfer(acu_new_unique(p, free), r);
-	acu_return(p);
+	acu_return p;
 END
 
 This approach requires that the client creates an empty acu_unique 

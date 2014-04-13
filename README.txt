@@ -43,9 +43,9 @@ The project is divided in the following library modules:
   pointed to by shared_ptr), functions for managing them, and macro brackets
   BEGIN..END and BEGIN_SCOPE..END_SCOPE, which should be used instead of
   braces at least in those parts of code that assume automatic cleanup, and
-  macros acu_return(v), acu_return_void, acu_exit_scope and acu_exit for
-  clean exit from a scope. See file "smartpointers_in_c.txt" for a more
-  detailed description of this library.
+  macros acu_return, acu_exit_scope and acu_exit for clean exit from a scope.
+  See file "smartpointers_in_c.txt" for a more detailed description of this
+  library.
 
 - acu_std.{c,h} provides wrappers for some standard library constructors
   (such as malloc, fopen, pthread_mutex_lock, ...) that create unique
