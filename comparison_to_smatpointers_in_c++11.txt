@@ -15,7 +15,7 @@ x = t->member;
 
 autocleanup:
 acu_unique *t = new_T();
-x = (T *)acu_dereference(t)->member;
+x = ((T *)acu_dereference(t))->member;
 
 Due to complexity and performance hit from the extra indirection (especially
 with shared pointers, see below) it is advisable to not use this dereferencing
