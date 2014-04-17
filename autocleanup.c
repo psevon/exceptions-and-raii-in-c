@@ -120,8 +120,8 @@ void acu_update(acu_unique *u, void *newptr)
 	p->ptr = newptr;
 }
 
-/* Dereference unique object pointer, follow chain of forward links first */
-void *acu_dereference(acu_unique *u)
+/* Get pointer to managed object, follow chain of forward links first */
+void *acu_get_ptr(acu_unique *u)
 {
 	struct _acu_node *p = (struct _acu_node *)u;
 	while (p->del == _acu_del_strong_ref) p = p->ptr;

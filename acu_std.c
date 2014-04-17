@@ -43,7 +43,7 @@ void *acu_calloc_t(size_t n, size_t s)
 
 void *acu_realloc(size_t s, acu_unique *a)
 {
-	void *p = realloc(acu_dereference(a), s);
+	void *p = realloc(acu_get_ptr(a), s);
 	acu_update(a, p);
 	if (p == NULL) acu_destruct(a);
 	return p;
@@ -51,7 +51,7 @@ void *acu_realloc(size_t s, acu_unique *a)
 
 void *acu_realloc_t(size_t s, acu_unique *a)
 {
-	void *p = realloc(acu_dereference(a), s);
+	void *p = realloc(acu_get_ptr(a), s);
 	acu_update(a, p);
 	if (p == NULL)
 	{

@@ -93,7 +93,7 @@ BEGIN
 	TRY
 		s = g(x, r);
 		printf("Function g returned %s\n", s);
-		printf("Got handle to shared string %s\n", (char *)acu_dereference(q));
+		printf("Got handle to shared string %s\n", (char *)acu_get_ptr(q));
 	CATCH(e)
 		printf("Enter catch block of h\n");
 		struct name_exception *n = name_exception(e);

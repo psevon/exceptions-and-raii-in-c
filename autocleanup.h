@@ -112,8 +112,8 @@ void acu_transfer(acu_unique *from, acu_unique *to);
 /* Swap the contents of two unique pointers */
 void acu_swap(acu_unique *a, acu_unique *b);
 
-/* Dereference unique pointer, follow chain of forward links first */
-void *acu_dereference(acu_unique *u);
+/* Get pointer to managed object, follow chain of forward links first */
+void *acu_get_ptr(acu_unique *u);
 
 /* Create new acu_unique object with a weak reference to shared node 's'. Increase weak reference count of 's' by one. */
 acu_unique *acu_new_weak_reference(acu_shared *s);

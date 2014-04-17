@@ -33,7 +33,7 @@ The unique and shared pointers defined in this library have a slightly
 different role compared to their C++ counterparts, as they are primarily 
 only intended to control the lifespan of the objects they point to, and 
 not for accessing the objects, although functionality is provided for 
-object access (acu_dereference(u)), but due to limitations of C the 
+object access (acu_get_ptr(u)), but due to limitations of C the 
 returned pointer must be excplicitly casted to correct type.
 
 Another major difference is that the C implementations have an extra 
