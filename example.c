@@ -42,6 +42,8 @@ BEGIN
 	 * current scope. The function does not need to obtain a pointer to the actual acu_unique
 	 * node at all. */
 	char *s1 = acu_strdup_demo("String allocated in f");
+	char *s1b = acu_strdup_demo("String allocated in f but ownership passed to enclosing scope");
+	acu_yield(acu_latest());
 
 	/* Transfer of scope: allocate an object in this scope, and then pass ownership to another acu_unique node
          * received as an argument. */

@@ -1,0 +1,89 @@
+Autocleanup provides very similar functionality to the smartpointers in
+C++ 11, but there are differences in the usage. This document lists some
+of them, with examples on how specific C++ operations are done with
+autocleanup.
+
+1. Dereferencing
+Since in C you cannot overload operators, dereferencing must be done using
+a function call. And since in C there are no templates, autocleanup only
+provides generic smartpointers that dereference to void *, hence requiring
+explicit casting.
+
+C++:
+std::unique_ptr<T> t();
+x = t->member;
+
+autocleanup:
+acu_unique *t = new_T();
+x = (T *)acu_get_ptr(t)->member;
+
+Due to complexity and performance hit from the extra indirection (especially
+with shared pointers, see below) it is advisable to not use this dereferencing
+mechanism extensively. Instead, I recommend dual approac, where direct
+typed pointers are used for all actual access of the managed objects, and
+smart pointers only for managing their ownership and scope.
+
+
+2. Move semantics
+acu_transfer is very close to the move constructor in C++, except that the
+receiving acu_unique object must exist already. Call acu_reserve() to create
+an empty pointer.
+
+C++:
+unique_ptr<T> t = std::move(s);
+
+autocleanup:
+acu_unique *t = acu_reserve();
+acu_transfer(s, t);
+
+In C++ the complex return value semantics allow for returning a unique_ptr
+and have move consructor semantics applied. With autocleanup it's possible
+to pass ownership of unique pointers to the enclosing dynamic scope by
+calling acu_yield(u). In order to pass ownership to a scope outer than
+the immediately enclosing one, a reference to the receiving empty unique
+pointer must be passed to the function, and the pointer can be passed
+using acu_transfer.
+
+
+
+3. Shared and weak pointers.
+In C++, the shared and weak pointers for the same managed object have a shared
+counter object they point to, and they point to the managed object directly. In
+autocleanup, acu_shared is the counter object, which also points to the managed
+object, and is owned by one or more other unique or shared pointers with strong
+or weak references to it. Since all acu_shared objects are ultimately owned by
+acu_unique objects only, the cleanup mechanism in autocleanup is based on
+invoking destructors of acu_unique objects when they go out of scope.
+Destructor of unique pointers that own strong or weak references decrease
+the respective reference count and trigger destructor of the managed object
+if the strong reference count goes to zero, and remove the shared pointer itself
+if the weak count goes to zero.
+
+In autocleanup, a shared pointer cannot be created directly. Instead, first
+create a unique pointer, which can then be shared:
+
+acu_unique *t = new_T();
+acu_shared *s = acu_share(t);
+
+After this, 't' will contain a strong reference to the shared pointer 's'.
+New strong references can be created using
+
+acu_unique *t2 = acu_new_refererence(s);
+
+and new weak references using
+
+acu_unique *w = acu_new_weak_reference(s);
+
+
+4. Locking weak pointers
+Weak references can't be used for accessing the pointed object before aquiring
+a stong reference lock to it. This locking reference prevents the managed
+object from being destructed while being used.
+
+C++:
+shared_ptr<T> s = w.lock();
+
+autocleanup:
+acu_unique *s = acu_lock_reference(w);
+
+

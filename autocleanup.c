@@ -22,10 +22,16 @@ struct _acu_node {
 	void (*del)(void *);
 };
 
+#define _ACU_TRANSFERRABLE 1
+#define _ACU_SHAREABLE 2
+#define _ACU_SUBMITTABLE 4
 /* Class for unique object references */
 struct _acu_stack_node {
 	struct _acu_node base;
 	acu_unique *next, *prev;
+	struct _acu_connection *conn;
+	long scope;
+	int properties;
 };
 
 /* Class for shared object references */
@@ -43,6 +49,7 @@ struct _acu_shared_node {
  * _acu_latest is set to NULL at function entry, whenever it's accessed using acu_latest(), and when acu_attach or acu_destruct
  * is called */
 __thread acu_unique *_acu_stack_ptr = NULL, *_acu_latest = NULL;
+__thread long _acu_scope = 0;
 
 
 /* Destruct a unique node without updating stack pointers.
@@ -56,15 +63,27 @@ static void _acu_destruct(acu_unique *u)
 }
 
 /* Pop and destruct all unique nodes in a stack pointed to by *stack_ref_ptr, until node 'u' (inclusive), or
- * all nodes if u == NULL. */
-void _acu_cleanup(acu_unique *u, acu_unique **stack_ptr_ref)
+ * all nodes if u == NULL. However, do not touch nodes whose scope is smaller than minscope (yielded nodes).
+ */
+void _acu_cleanup(acu_unique *u, acu_unique **stack_ptr_ref, long minscope)
 {
+	acu_unique **n = stack_ptr_ref, *next = NULL;
 	if (u) u = u->prev;
-	while (*stack_ptr_ref != u)
+	
+	while (*n != u)
 	{
-		acu_unique *c = *stack_ptr_ref;
-		*stack_ptr_ref = c->prev;
-		_acu_destruct(c);
+		if ((*n)->scope > minscope)
+		{
+			acu_unique *c = *n;
+			*n = c->prev;
+			_acu_destruct(c);
+		}
+		else
+		{
+			if (n == stack_ptr_ref) (*n)->next = next;
+			next = *n;
+			n = &((*n)->prev);
+		}
 	}
 }
 
@@ -79,6 +98,8 @@ static acu_unique *_acu_new_unique(void *ptr, void (*del)(void *), acu_unique **
 	u->prev = _acu_stack_ptr;
 	if (*stack_ptr_ref) (*stack_ptr_ref)->next = u;
 	*stack_ptr_ref = u;
+	u->scope = _acu_scope;
+	u->properties = _ACU_TRANSFERRABLE | _ACU_SHAREABLE | _ACU_SUBMITTABLE;
 	return u;
 }
 
@@ -115,34 +136,48 @@ void acu_destruct(acu_unique *u)
 /* Update pointer to the base object, follow chain of forward links first */
 void acu_update(acu_unique *u, void *newptr)
 {
+	if (u->base.del == _acu_del_weak_ref) throw(new_name_exception("acu_update: cannot modify weakly referenced object"));
 	struct _acu_node *p = (struct _acu_node *)u;
-	while (p->del == _acu_del_strong_ref) p = p->ptr;
+	if (p->del == _acu_del_strong_ref) p = p->ptr;
 	p->ptr = newptr;
 }
 
-/* Get pointer to managed object, follow chain of forward links first */
+/* Get pointer to managed object, follow strong reference first */
 void *acu_get_ptr(acu_unique *u)
 {
+	if (u->base.del == _acu_del_weak_ref) throw(new_name_exception("acu_update: cannot access weakly referenced object"));
 	struct _acu_node *p = (struct _acu_node *)u;
-	while (p->del == _acu_del_strong_ref) p = p->ptr;
+	if (p->del == _acu_del_strong_ref) p = p->ptr;
 	return p->ptr;
 }
 
 /* Assign unique object reference from 'from' to 'to'. This can be used to transfer ownership of unique node to an outer scope. */
 void acu_transfer(acu_unique *from, acu_unique *to)
 {
+	if (from->properties & _ACU_TRANSFERRABLE == 0) throw(new_name_exception("acu_transfer: non-transferrable pointer"));
 	to->base = from->base;
+	to->properties = from->properties;
 	from->base.del = NULL; // prevent the object whose ownership was transferred to 'to' from being destructed
 	acu_destruct(from);
+}
+
+/* Pass unique pointer to the enclosing dynamic scope (e.g., the calling function) */
+void acu_yield(acu_unique *u)
+{
+	if (u->properties & _ACU_TRANSFERRABLE == 0) throw(new_name_exception("acu_yield: non-transferrable pointer"));
+	if (u->scope > _acu_scope - 1) u->scope = _acu_scope - 1;
 }
 
 /* Swap the contents of two unique pointers */
 void acu_swap(acu_unique *a, acu_unique *b)
 {
-	acu_unique t = *a; *a = *b; *b = t;
+	if (a->properties & b->properties & _ACU_TRANSFERRABLE == 0)
+		throw(new_name_exception("acu_swap: non-transferrable pointer"));
+	struct _acu_node t = a->base; a->base = b->base; b->base = t;
+	int p = a->properties; a->properties = b->properties; b->properties = p;
 }
 
-/* Destructor for a unique pointer with a weak reference to a shard pointer */
+/* Destructor for a unique pointer with a weak reference to a shared pointer */
 static void _acu_del_weak_ref(void *p)
 {
 	acu_shared *s = (acu_shared *)p;
@@ -165,6 +200,7 @@ static void _acu_del_weak_ref(void *p)
 static void _acu_del_strong_ref(void *p)
 {
 	acu_shared *s = (acu_shared *)p;
+
 	if (
 	#ifndef ACU_THREAD_SAFE
 		--s->refcnt == 0
@@ -173,7 +209,7 @@ static void _acu_del_strong_ref(void *p)
 	#endif
 	)
 	{
-		_acu_cleanup(NULL, &(s->tail));
+		_acu_cleanup(NULL, &(s->tail), 0);
 		if (s->base.del) (s->base.del)(s->base.ptr);
 		_acu_del_weak_ref(p);
 	}	
@@ -184,6 +220,7 @@ static void _acu_del_strong_ref(void *p)
  * shared node. Set reference count of the shared node to 1. Return pointer to the shared node. */
 acu_shared *acu_share(acu_unique *u)
 {
+	if (u->properties & _ACU_SHAREABLE == 0) throw(new_name_exception("acu_share: not shareable"));
 	acu_shared *s = calloc_t(1, sizeof(acu_shared));
 	s->base = u->base;
 	s->refcnt = s->weakcnt = 1;
@@ -192,6 +229,7 @@ acu_shared *acu_share(acu_unique *u)
 	#ifdef ACU_THREAD_SAFE
 		if (pthread_mutex_init(&(s->lock), NULL)) throw(new_io_exception(errno, "", "acu_share"));
 	#endif
+
 	return s;
 }
 
@@ -214,6 +252,7 @@ acu_unique *acu_new_reference(acu_shared *s)
 acu_unique *acu_new_weak_reference(acu_shared *s)
 {
 	acu_unique *u = acu_new_unique(s, _acu_del_weak_ref);
+	u->properties &= ~(_ACU_SUBMITTABLE | _ACU_SHAREABLE);
 	#ifndef ACU_THREAD_SAFE
 		s->weakcnt++;
 	#else 
@@ -227,8 +266,9 @@ acu_unique *acu_new_weak_reference(acu_shared *s)
  * only owns a weak reference before actually using the resource to guarantee that it actually exists,
  * and it won't be destructed while being used. Returns NULL if the resource is expired. */
 acu_unique *acu_lock_reference(acu_unique *weakptr)
-{
+BEGIN
 	if (!weakptr || weakptr->base.del != _acu_del_weak_ref) throw(new_name_exception("acu_get_strong_reference: argument not a weakptr"));
+
 	acu_shared *s = weakptr->base.ptr;
 	if (
 	#ifndef ACU_THREAD_SAFE
@@ -239,21 +279,33 @@ acu_unique *acu_lock_reference(acu_unique *weakptr)
 	)
 	{
 		s->refcnt = 0;
-		return NULL;
+		acu_return NULL;
 	}
 
-	acu_unique *u = acu_new_unique(s, _acu_del_strong_ref);
-	return u;
-}
-
+	acu_unique *u;
+	TRY
+		u = acu_new_unique(s, _acu_del_strong_ref);
+	CATCH(e)
+		#ifndef ACU_THREAD_SAFE
+			s->refcnt--;
+		#else
+			(void)__sync_fetch_and_sub(&(s->refcnt), 1);
+		#endif
+		rethrow;
+	TRY_END
+	u->properties &= ~(_ACU_SUBMITTABLE | _ACU_SHAREABLE);
+	acu_yield(u);
+	acu_return u;
+END
 
 
 /* Detach unique node 'u' from the main stack and push a copy of it to stack of shared object 's'.
  * Note that the library is designed so that user agent may not get handles to unique objects
  * detached from the main stack. This function is not called by other acu library functions, and
- * therefore it may rely on 'u' always being in the main stack */
+ * therefore it may rely on 'u' always being in the main cleanup stack */
 void acu_submit_to(acu_unique *u, acu_shared *s)
-{
+BEGIN
+	if (u->properties & _ACU_SUBMITTABLE == 0) throw(new_name_exception("acu_submit_to: cannot be submitted"));
 	/* Make a copy of a to ensure that caller will not have a handle to the object after attaching */
 	#ifdef ACU_THREAD_SAFE
 		/* Take mutex lock only if acu_new_[weak_]reference(s) has been called at least once, otherwise
@@ -274,10 +326,10 @@ void acu_submit_to(acu_unique *u, acu_shared *s)
 	if (u->next) u->next->prev = u->prev; else _acu_stack_ptr = u->prev;
 	_acu_latest = NULL;
 	free(u);
-}
+END
 
-void _acu_atexit_cleanup(void) { _acu_cleanup(NULL, &_acu_stack_ptr); }
+void _acu_atexit_cleanup(void) { _acu_cleanup(NULL, &_acu_stack_ptr, 0); }
 #ifdef ACU_THREAD_SAFE
-	void _acu_thread_cleanup(void *dummy) { _acu_cleanup(NULL, &_acu_stack_ptr); }
+	void _acu_thread_cleanup(void *dummy) { _acu_cleanup(NULL, &_acu_stack_ptr, 0); }
 #endif
 

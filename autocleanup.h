@@ -70,9 +70,10 @@ struct _acu_shared_node;
 typedef struct _acu_shared_node acu_shared;
 
 extern __thread acu_unique *_acu_stack_ptr, *_acu_latest;
+extern __thread long _acu_scope;
 
 /* Private cleanup functions, required in the header because the macros use them */
-void _acu_cleanup(acu_unique *u, acu_unique **tailptr);
+void _acu_cleanup(acu_unique *u, acu_unique **tailptr, long);
 void _acu_atexit_cleanup(void);
 #ifdef ACU_THREAD_SAFE
 	void _acu_thread_cleanup(void *);
@@ -109,6 +110,9 @@ acu_unique *acu_new_reference(acu_shared *s);
 /* Copy unique object reference from 'from' to 'to', and unlink unique pointer 'from'. This can be used to transfer ownership of unique node to an outer scope. */
 void acu_transfer(acu_unique *from, acu_unique *to);
 
+/* Pass unique pointer to the enclosing dynamic scope (e.g., the calling function) */
+void acu_yield(acu_unique *u);
+
 /* Swap the contents of two unique pointers */
 void acu_swap(acu_unique *a, acu_unique *b);
 
@@ -127,18 +131,20 @@ acu_unique *acu_lock_reference(acu_unique *weakptr);
 	#define acu_init_thread phthread_cleanup_push(_acu_thread_cleanup, NULL);
 #endif
 
-#define BEGIN { acu_unique *_acu_stack_ptr_scope = acu_reserve(), *_acu_stack_ptr_fn = _acu_stack_ptr_scope; _acu_latest = NULL;
-#define BEGIN_SCOPE { acu_unique *_acu_stack_ptr_scope = acu_reserve(); jmp_buf _acu_scope_context; if (setjmp(_acu_scope_context) == 0) {
+#define BEGIN { acu_unique *_acu_stack_ptr_scope = acu_reserve(), *_acu_stack_ptr_fn = _acu_stack_ptr_scope; _acu_latest = NULL; \
+		long _acu_current_scope = _acu_scope++;
+#define BEGIN_SCOPE { acu_unique *_acu_stack_ptr_scope = acu_reserve(); jmp_buf _acu_scope_context; long _acu_current_scope = _acu_scope++; \
+		if (setjmp(_acu_scope_context) == 0) {
 
-#define END_SCOPE } _acu_cleanup(_acu_stack_ptr_scope, &_acu_stack_ptr); }
-#define END _acu_cleanup(_acu_stack_ptr_fn, &_acu_stack_ptr); }
+#define END_SCOPE } _acu_scope = _acu_current_scope; _acu_cleanup(_acu_stack_ptr_scope, &_acu_stack_ptr, _acu_current_scope); }
+#define END _acu_scope = _acu_current_scope; _acu_cleanup(_acu_stack_ptr_fn, &_acu_stack_ptr, _acu_current_scope); }
 
 #define acu_exit_scope longjmp(_acu_scope_context, 1)
-#define acu_exit(v) { _acu_cleanup(NULL, &_acu_stack_ptr); exit(v); }
+#define acu_exit(v) { _acu_cleanup(NULL, &_acu_stack_ptr, 0); exit(v); }
 
 /* This is designed to be usable in any context plain return can be used. Uses "while" instead of "if",
  * because "if" would break things if there's an "else" right after acu_return. */
-#define acu_return while (_acu_cleanup(_acu_stack_ptr_fn, &_acu_stack_ptr), 1) return
+#define acu_return while (_acu_scope = _acu_current_scope, _acu_cleanup(_acu_stack_ptr_fn, &_acu_stack_ptr, _acu_current_scope), 1) return
 
 #endif
 
