@@ -29,7 +29,6 @@ struct _acu_node {
 struct _acu_stack_node {
 	struct _acu_node base;
 	acu_unique *next, *prev;
-	struct _acu_connection *conn;
 	long scope;
 	int properties;
 };
