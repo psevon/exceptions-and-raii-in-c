@@ -139,7 +139,7 @@ void acu_transfer(acu_unique *from, acu_unique *to)
 /* Swap the contents of two unique pointers */
 void acu_swap(acu_unique *a, acu_unique *b)
 {
-	acu_unique t = *a; *a = *b; *b = t;
+	struct _acu_node t = a->base; a->base = b->base; b->base = t;
 }
 
 /* Destructor for a unique pointer with a weak reference to a shard pointer */
